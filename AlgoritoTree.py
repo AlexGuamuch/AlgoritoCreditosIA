@@ -1,87 +1,105 @@
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import train_test_split
+import os
 
-# 1. Crear datos de ejemplo (simulando historial de solicitudes)
-data = {
-    'Nombre': ['Juan', 'María', 'Pedro', 'Ana', 'Luis', 'Laura', 'Carlos', 'Sofía', 'Diego', 'Elena'],
-    'Edad': [25, 45, 30, 50, 35, 28, 42, 55, 33, 40],
-    'Ingresos': [30000, 70000, 45000, 80000, 60000, 35000, 75000, 90000, 55000, 65000],
-    'Puntuacion_Credito': [650, 720, 680, 780, 710, 630, 750, 800, 690, 730],
-    'Deuda': [5000, 20000, 15000, 10000, 8000, 12000, 18000, 5000, 10000, 15000],
-    'Empleo_Anios': [2, 10, 5, 15, 8, 3, 12, 20, 6, 9],
-    'Aprobado': ['No', 'Sí', 'No', 'Sí', 'Sí', 'No', 'Sí', 'Sí', 'Sí', 'Sí']
-}
+def cargar_datos():
+    try:
+        datos = pd.read_csv('datos.csv')
+        print("Datos cargados exitosamente!")
+        print(f"Registros cargados: {len(datos)}")
+        return datos
+    except FileNotFoundError:
+        print("\nError: No se encontró el archivo 'datos.csv'")
+        print("Asegúrate de que:")
+        print("1. El archivo existe en la misma carpeta que este script")
+        print("2. Se llama exactamente 'datos.csv'")
+        return None
+    except Exception as e:
+        print(f"\nError al leer el archivo: {str(e)}")
+        return None
 
-datos = pd.DataFrame(data)
+def preparar_modelo(datos):
 
+    columnas_requeridas = {'Edad', 'Ingresos', 'Deuda', 'Empleo_Anios', 'Aprobado'}
+    if not columnas_requeridas.issubset(datos.columns):
+        print("\nError: El CSV debe contener estas columnas exactas:")
+        print("Edad, Ingresos, Deuda, Empleo_Anios, Aprobado")
+        print("\nColumnas encontradas:")
+        print(datos.columns.tolist())
+        return None, None, None
+ 
+    datos_limpios = datos.dropna()
+    if len(datos_limpios) == 0:
+        print("\nError: No hay datos válidos después de limpiar valores faltantes")
+        return None, None, None
 
-le = LabelEncoder()
-datos['Aprobado'] = le.fit_transform(datos['Aprobado'])
+    le = LabelEncoder()
+    datos_limpios['Aprobado'] = le.fit_transform(datos_limpios['Aprobado'])
 
-# Separar características y variable objetivo
-X = datos.drop(['Nombre', 'Aprobado'], axis=1)
-y = datos['Aprobado']
+    X = datos_limpios[['Edad', 'Ingresos', 'Deuda', 'Empleo_Anios']]
+    y = datos_limpios['Aprobado']
 
-# Escalar características
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
-# 3. Entrenar modelo
-modelo = DecisionTreeClassifier(random_state=42, max_depth=3)
-modelo.fit(X_scaled, y)
-
-# 4. Función para predecir en tiempo real
-def predecir_aprobacion():
-    print("\nIngresa los datos del solicitante:")
-    nombre = input("Nombre: ")
-    edad = int(input("Edad: "))
-    ingresos = float(input("Ingresos anuales: "))
-    puntuacion = int(input("Puntuación de crédito (300-850): "))
-    deuda = float(input("Deuda actual: "))
-    empleo_anios = int(input("Años en el empleo actual: "))
+    modelo = DecisionTreeClassifier(random_state=42, max_depth=3)
+    modelo.fit(X_scaled, y)
     
-    # Crear dataframe con los nuevos datos
-    nuevo_solicitante = pd.DataFrame({
-        'Edad': [edad],
-        'Ingresos': [ingresos],
-        'Puntuacion_Credito': [puntuacion],
-        'Deuda': [deuda],
-        'Empleo_Anios': [empleo_anios]
-    })
-    
-    # Escalar los datos igual que el conjunto de entrenamiento
-    nuevo_solicitante_scaled = scaler.transform(nuevo_solicitante)
-    
-    # Predecir
-    prediccion = modelo.predict(nuevo_solicitante_scaled)
-    
-    # Convertir predicción numérica a texto
-    resultado = "SÍ" if prediccion[0] == 1 else "NO"
-    
-    print(f"\nResultado para {nombre}:")
-    print("----------------------------")
-    print(f"¿La solicitud será aprobada? {resultado}")
-    print("----------------------------")
+    return modelo, scaler, le
 
-# 5. Interfaz de consola
-while True:
-    print("\nSistema de Predicción de Aprobación de Crédito")
-    print("1. Predecir aprobación")
-    print("2. Salir")
-    
-    opcion = input("Selecciona una opción (1/2): ")
-    
-    if opcion == '1':
-        predecir_aprobacion()
-    elif opcion == '2':
-        print("Saliendo del sistema...")
-        break
-    else:
-        print("Opción no válida. Por favor ingresa 1 o 2.")
+def predecir(modelo, scaler):
+    print("\nIngrese los datos del cliente:")
+    try:
+        edad = int(input("Edad: "))
+        ingresos = float(input("Ingresos Anuales: "))
+        deuda = float(input("Deuda actual: "))
+        empleo = int(input("Años en el empleo actual: "))
+        
+        nuevo = pd.DataFrame([[edad, ingresos, deuda, empleo]], 
+                           columns=['Edad', 'Ingresos', 'Deuda', 'Empleo_Anios'])
+        
+        nuevo_scaled = scaler.transform(nuevo)
+        aprobado = modelo.predict(nuevo_scaled)[0]
+        
+        print("\nResultado de la precalificacion:")
+        print("--------------------------")
+        print("APROBADO: Sí" if aprobado == 1 else "APROBADO: No")
+        print("--------------------------")
+    except ValueError:
+        print("Error: Ingrese valores numéricos válidos")
 
-    continuar = input("\n¿Deseas realizar otra predicción? (s/n): ")
-    if continuar.lower() != 's':
-        print("Saliendo del sistema...")
-        break
+def main():
+    print("\nSISTEMA DE PRECALIFICACION DE CLIENTE")
+    print("------------------------------------")
+
+    datos = cargar_datos()
+    if datos is None:
+        return
+
+    modelo, scaler, _ = preparar_modelo(datos)
+    if modelo is None:
+        return
+
+    while True:
+        print("\nOpciones:")
+        print("1. Precalificar Cliente")
+        print("2. Salir")
+        
+        opcion = input("Seleccione una opción (1-2): ").strip()
+        
+        if opcion == '1':
+            predecir(modelo, scaler)
+        elif opcion == '2':
+            print("\nSaliendo del sistema...")
+            break
+        else:
+            print("Opción no válida")
+        
+        if opcion == '1':
+            if input("\n¿Otra predicción? (s/n): ").lower() != 's':
+                print("\nSaliendo del sistema...")
+                break
+
+if __name__ == "__main__":
+    main()
